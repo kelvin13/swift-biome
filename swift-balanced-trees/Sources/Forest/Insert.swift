@@ -9,6 +9,7 @@ extension Forest where Value:Comparable
 }
 extension Forest 
 {
+    @available(*, deprecated, message: "use one of insert(_:before:) or insert(_:)")
     @inlinable public mutating
     func push(min value:Value, into tree:inout Tree.Head?) 
     {
@@ -18,12 +19,12 @@ extension Forest
         }
         else 
         {
-            tree = .init(self.insert(root: value))
+            tree = .some(self.insert(root: value))
         }
     }
     @discardableResult
     @inlinable public mutating
-    func insert(_ value:Value, into tree:inout Tree.Head?,
+    func insert(_ value:__owned Value, into tree:inout Tree.Head?,
         order ascending:(Value, Value) throws -> Bool) rethrows -> Index
     {
         switch try self[tree].walk(by: { try ascending($0, value) })
@@ -38,7 +39,7 @@ extension Forest
             }
             else 
             {
-                let head:Tree.Head = self.insert(root: value)
+                let head:Tree.Head = self.insert(value)
                 tree = head 
                 return head.index 
             }
@@ -51,16 +52,27 @@ extension Forest
         }
     }
 
+    @inlinable public mutating
+    func insert(_ value:__owned Value, before head:Tree.Head) -> Tree.Head
+    {
+        .init(self.insert(value, on: .left, of: head.index))
+    }
     @inlinable public mutating 
-    func insert(root value:Value) -> Tree.Head  
+    func insert(_ value:__owned Value) -> Tree.Head  
     {
         let index:Index = self.endIndex
         self.nodes.append(.init(.black(value), at: index))
         return .init(index)
     }
+    @available(*, deprecated, renamed: "insert(_:)")
+    @inlinable public mutating 
+    func insert(root value:Value) -> Tree.Head  
+    {
+        self.insert(value)
+    }
 
     @inlinable public mutating 
-    func insert(_ value:Value, on side:Node.Side, of parent:Index) -> Index
+    func insert(_ value:__owned Value, on side:Node.Side, of parent:Index) -> Index
     {
         assert(self[parent][side] == parent)
 

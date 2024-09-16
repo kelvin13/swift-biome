@@ -1,6 +1,7 @@
 import Forest 
 
 infix operator ==? :ComparisonPrecedence
+infix operator ..? :ComparisonPrecedence
 
 struct OptionalUnwrapFailure<Wrapped>:Error, CustomStringConvertible 
 {
@@ -36,7 +37,7 @@ struct AssertEquivalenceFailure<T>:Error, CustomStringConvertible
         """
     }
 }
-func ==? <LHS, RHS>(lhs:LHS, rhs:RHS) -> AssertEquivalenceFailure<[LHS.Element]>?
+func ..? <LHS, RHS>(lhs:LHS, rhs:RHS) -> AssertEquivalenceFailure<[LHS.Element]>?
     where LHS:Sequence, RHS:Sequence, LHS.Element == RHS.Element, LHS.Element:Equatable
 {
     let rhs:[LHS.Element] = .init(rhs)
@@ -137,6 +138,8 @@ struct Main
     mutating 
     func main() 
     {
+        self.testBisection()
+
         self.test(inserting:  0 ..< 256,             removing:  0 ..< 256)
         self.test(inserting:  0 ..< 256,             removing: (0 ..< 256).reversed())
         self.test(inserting: (0 ..< 256).reversed(), removing: (0 ..< 256))
@@ -161,7 +164,7 @@ struct Main
         }
 
         self.assert(forest.count ==? sorted.count)
-        self.assert(forest[tree] ==? sorted)
+        self.assert(forest[tree] ..? sorted)
         self.assert(forest[tree].validate())
 
         for element:Int in removals
@@ -174,5 +177,30 @@ struct Main
         }
 
         self.assert(forest._inhabitants() ==? 0)
+    }
+    mutating 
+    func testBisection() 
+    {
+        var forest:Forest<(Int, Unicode.Scalar)> = .init()
+        var tree:Forest<(Int, Unicode.Scalar)>.Tree.Head 
+
+        tree = forest.insert((0xA, "c"))
+        tree = forest.insert((0x4, "b"), before: tree)
+        tree = forest.insert((0x3, "a"), before: tree)
+
+        let results:[Unicode.Scalar?] = (0x0 ... 0xB).map 
+        {
+            (x:Int) in 
+            if  let index:Forest<(Int, Unicode.Scalar)>.Index = 
+                    forest[tree].first(where: { $0.0 >= x })
+            {
+                return forest[index].value.1
+            }
+            else 
+            {
+                return nil 
+            }
+        }
+        self.assert(results ..? ["a", "a", "a", "a", "b", "c", "c", "c", "c", "c", "c", nil])
     }
 }

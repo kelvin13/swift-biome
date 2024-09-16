@@ -1,6 +1,6 @@
 import Grammar
 
-extension Collection where Element == URI.Vector?
+extension Sequence where Element == URI.Vector?
 {
     @inlinable public
     var normalized:(components:[String], fold:Int)
@@ -149,7 +149,7 @@ struct URI:CustomStringConvertible, Sendable
         self.init(path: CollectionOfOne<String>.init(root), query: query)
     }
     @inlinable public
-    init(path:[Vector?] = [], query:[Parameter]? = nil)
+    init(path:[Vector?] = [], query:[Parameter]?)
     {
         self.path = path == [nil] ? [] : path
         self.query = query
@@ -164,12 +164,12 @@ struct URI:CustomStringConvertible, Sendable
     @inlinable public
     init(absolute string:some StringProtocol) throws 
     {
-        self = try Rule<String.Index>.Absolute.parse(string.utf8)
+        self = try Absolute<String.Index>.parse(string.utf8)
     }
     @inlinable public
     init(relative string:some StringProtocol) throws 
     {
-        self = try Rule<String.Index>.Relative.parse(string.utf8)
+        self = try Relative<String.Index>.parse(string.utf8)
     }
     
     @inlinable public static 

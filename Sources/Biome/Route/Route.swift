@@ -1,47 +1,49 @@
-struct Route 
+struct Route:Hashable, Sendable, CustomStringConvertible 
 {
-    let key:Key 
-    let target:Symbol.Composite 
-
-    init(key:Key, target:Symbol.Composite)
+    let namespace:Module
+    let stem:Stem 
+    let leaf:Leaf 
+    
+    var outed:Self? 
     {
-        self.key = key 
-        self.target = target 
+        self.leaf.outed.map { .init(self.namespace, self.stem, $0) }
     }
-
-    typealias Trees = (natural:[NaturalTree], synthetic:[SyntheticTree])
-
-    struct NaturalTree 
+    
+    var description:String 
     {
-        let key:Key
-        let target:Symbol.Index
-
-        var route:Route 
-        {
-            .init(key: key, target: .init(natural: self.target))
-        }
+        """
+        \(self.namespace.nationality.offset):\
+        \(self.namespace.offset).\
+        \(self.stem.bitPattern >> 1).\
+        \(self.leaf.bitPattern)
+        """
     }
-    struct SyntheticTree:RandomAccessCollection
+    
+    init(_ namespace:Module, _ stem:Stem, _ leaf:Stem, orientation:_SymbolLink.Orientation)
     {
-        let namespace:Module.Index 
-        let stem:Stem 
-        
-        let diacritic:Symbol.Diacritic 
-        let features:[(base:Symbol.Index, leaf:Leaf)]
-
-        var startIndex:Int 
+        self.init(namespace, stem, .init(leaf, orientation: orientation))
+    }
+    init(_ namespace:Module, _ stem:Stem, _ leaf:Leaf)
+    {
+        self.namespace = namespace
+        self.stem = stem
+        self.leaf = leaf
+    }
+    
+    func first<T>(where transform:(Self) throws -> T?) rethrows -> (T, redirected:Bool)? 
+    {
+        if      let result:T = try transform(self)
         {
-            self.features.startIndex
+            return (result, false)
         }
-        var endIndex:Int 
+        else if let outed:Self = self.outed, 
+                let result:T = try transform(outed)
         {
-            self.features.endIndex
+            return (result, true)
         }
-        subscript(index:Int) -> Route
+        else 
         {
-            let (base, leaf):(Symbol.Index, Leaf) = self.features[index]
-            return .init(key: .init(self.namespace, self.stem, leaf), 
-                target: .init(base, self.diacritic))
+            return nil
         }
     }
 }

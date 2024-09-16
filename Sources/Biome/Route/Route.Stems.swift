@@ -5,7 +5,9 @@ extension Route
         private 
         var counter:Stem
         private
-        var table:[String: Stem]
+        var table:[CaselessString: Stem]
+        private 
+        var free:[Stem]
         
         var _count:Int 
         {
@@ -14,8 +16,8 @@ extension Route
         var _memoryFootprint:Int 
         {
             let direct:Int = self.table.capacity * 
-                MemoryLayout<Dictionary<String, Stem>.Element>.stride
-            let indirect:Int = self.table.keys.reduce(0) { $0 + $1.utf8.count }
+                MemoryLayout<Dictionary<CaselessString, Stem>.Element>.stride
+            let indirect:Int = self.table.keys.reduce(0) { $0 + $1.lowercased.utf8.count }
             return direct + indirect
         }
         
@@ -23,109 +25,121 @@ extension Route
         {
             self.counter = .init()
             self.table = [:]
+            self.free = []
         }
+    }
+}
+extension CaselessString
+{
+    fileprivate 
+    init<Component>(_ components:some Sequence<Component>)
+        where Component:StringProtocol 
+    {
+        self.init(lowercased: components.map { $0.lowercased() }.joined(separator: "\u{0}"))
+    }
+}
+extension Route.Stems 
+{
+    private mutating 
+    func register(_ string:CaselessString) -> Route.Stem 
+    {
+        { $0 }(&self.table[string, default: self.free.popLast() ?? self.counter.increment()])
+    }
+    mutating 
+    func register<Component>(components:some Sequence<Component>) -> Route.Stem 
+        where Component:StringProtocol 
+    {
+        self.register(.init(components))
+    }
+    mutating 
+    func register(component:some StringProtocol) -> Route.Stem 
+    {
+        self.register(.init(component))
+    }
+}
         
-        private static 
-        func subpath<S>(_ component:S) -> String 
-            where S:StringProtocol 
+extension Route.Stems 
+{
+    private 
+    subscript(subpath:CaselessString) -> Route.Stem? 
+    {
+        self.table[subpath]
+    }
+    
+    // https://github.com/apple/swift/issues/61387
+    subscript<Component>(leaf component:Component) -> Route.Stem? 
+        where Component:StringProtocol
+    {
+        self.table[.init(component)]
+    }
+    private 
+    subscript<Component>(stem components:some Sequence<Component>) -> Route.Stem? 
+        where Component:StringProtocol
+    {
+        self.table[.init(components)]
+    }
+}
+extension Route.Stems
+{
+    private 
+    subscript(leaf component:_SymbolLink.Component) -> Route.Stem? 
+    {
+        if let hyphen:String.Index = component.hyphen 
         {
-            component.lowercased()
+            return self[leaf: component.string[..<hyphen]]
         }
-        private static 
-        func subpath<S>(_ components:S) -> String 
-            where S:Sequence, S.Element:StringProtocol 
+        else 
         {
-            components.map { $0.lowercased() }.joined(separator: "\u{0}")
+            return self[leaf: component.string]
         }
-        
-        private 
-        subscript(subpath:String) -> Stem? 
-        {
-            self.table[subpath]
-        }
-        
-        subscript<Component>(leaf component:Component) -> Stem? 
-            where Component:StringProtocol 
-        {
-            self.table[Self.subpath(component)]
-        }
-        private 
-        subscript<Path>(stem components:Path) -> Stem? 
-            where Path:Sequence, Path.Element:StringProtocol 
-        {
-            self.table[Self.subpath(components)]
-        }
+    }
 
-        
-        private 
-        subscript(leaf component:Symbol.Link.Component) -> Stem? 
+    subscript<Component>(namespace:Module, 
+        straight infix:some BidirectionalCollection<Component>) -> Route? 
+        where Component:StringProtocol
+    {
+        if  let leaf:Component = infix.last,
+            let leaf:Route.Stem = self[leaf: leaf],
+            let stem:Route.Stem = self[stem: infix.dropLast()]
         {
-            if let hyphen:String.Index = component.hyphen 
-            {
-                return self[leaf: component.string[..<hyphen]]
-            }
-            else 
-            {
-                return self[leaf: component.string]
-            }
+            return .init(namespace, stem, leaf, orientation: .straight)
         }
-
-        subscript<Path>(namespace:Module.Index, infix:Path) -> Key? 
-            where Path:BidirectionalCollection, Path.Element:StringProtocol 
+        else 
         {
-            if  let leaf:Path.Element = infix.last,
-                let leaf:Stem = self[leaf: leaf],
-                let stem:Stem = self[stem: infix.dropLast()]
-            {
-                return .init(namespace, stem, leaf, orientation: .straight)
-            }
-            else 
-            {
-                return nil
-            }
+            return nil
         }
-        subscript(namespace:Module.Index, infix:[String], suffix:Symbol.Link) -> Key? 
+    }
+    subscript<Component>(namespace:Module, 
+        infix:some BidirectionalCollection<Component>, 
+        suffix:_SymbolLink) -> Route? 
+        where Component:StringProtocol
+    {
+        guard let leaf:Route.Stem = self[leaf: suffix.path.last]
+        else 
         {
-            if  let leaf:Symbol.Link.Component = suffix.last,
-                let leaf:Stem = self[leaf: leaf],
-                let stem:Stem = self[stem: suffix.prefix(prepending: infix)]
-            {
-                return .init(namespace, stem, leaf, orientation: suffix.orientation)
-            }
-            else 
-            {
-                return nil
-            }
+            return nil 
         }
-        subscript(namespace:Module.Index, suffix:Symbol.Link) -> Key? 
+        let slice:_SymbolLink.SubSequence = suffix.dropLast()
+        let stem:Route.Stem? 
+        if  slice.isEmpty
         {
-            self[namespace, [], suffix]
+            stem = self[stem: infix]
         }
-        
-        private mutating 
-        func register(_ string:String) -> Stem 
+        else if infix.isEmpty
         {
-            if let stem:Stem = self.table[string]
-            {
-                return stem 
-            }
-            else 
-            {
-                self.table[string] = self.counter.increment()
-                return self.counter
-            }
+            stem = self[stem: slice]
         }
-        mutating 
-        func register<S>(components:S) -> Stem 
-            where S:Sequence, S.Element:StringProtocol 
+        else 
         {
-            self.register(Self.subpath(components))
+            stem = self[stem: infix.map(String.init(_:)) + slice]
         }
-        mutating 
-        func register<S>(component:S) -> Stem 
-            where S:StringProtocol 
+        return stem.map 
         {
-            self.register(Self.subpath(component))
+            .init(namespace, $0, leaf, orientation: suffix.path.orientation)
         }
+    }
+    subscript(namespace:Module, suffix:_SymbolLink) -> Route? 
+    {
+        self[namespace, EmptyCollection<String>.init(), suffix]
     }
 }

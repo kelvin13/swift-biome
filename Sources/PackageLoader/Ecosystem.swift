@@ -37,7 +37,8 @@ extension Ecosystem
                 try self.updatePackage(catalog.id,
                     graphs: try catalog.modules.map { try $0.load(project: project) }, 
                     brand: catalog.brand,
-                    pins: [.swift: version, .core: version])
+                    //pins: [.swift: version, .core: version])
+                    pins: [:])
             }
         }
     }

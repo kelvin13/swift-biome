@@ -68,6 +68,7 @@ extension Forest
             self.forest = forest
         }
 
+        @available(*, deprecated)
         @inlinable public 
         func find(by less:(Value) throws -> Bool?) rethrows -> Index?
         {
@@ -80,8 +81,25 @@ extension Forest
                 return nil
             }
         }
+
+        /// Returns the index of the first element in the tree that matches the 
+        /// given predicate, assuming that the elements are ordered such that 
+        /// if an arbitrary element matches the predicate, then all subsequent 
+        /// elements do so as well.
+        ///
+        /// The following diagram illustrates the output for a tree with 3 values, 
+        /// and a predicate of [`{ $0 >= x }`](), over `x` in [`0x0 ... 0xB`]().
+        /// 
+        /// ```text 
+        /// indices :               a   b                       c
+        ///         :               ↓   ↓                       ↓
+        /// values  :   0   1   2   3   4   5   6   7   8   9   A   B
+        ///         :   ──────────────┐───┐───────────────────────┐────
+        /// result  :   a   a   a   a │ b │ c   c   c   c   c   c │ nil 
+        ///             ──────────────└───└───────────────────────└────
+        /// ``` 
         @inlinable public 
-        func walk(by less:(Value) throws -> Bool?) rethrows -> (index:Index, side:Node.Side?)?
+        func first(where predicate:(Value) throws -> Bool) rethrows -> Index?
         {
             guard var current:Index = self.head?.index
             else 
@@ -89,62 +107,164 @@ extension Forest
                 return nil
             }
 
-            switch try less(self.forest[current].value)
+            if try predicate(self.forest[current].value)
             {
-            case false?:
-                // head can never have a left-child. we return `nil` and not `(current, .left)`
-                // to reflect the fact that any such insertion would also change ``head``.
-                return nil 
-            case nil: 
-                return (current, nil) 
-            case true?: 
-                break 
+                return current 
             }
-            ascending:
+
+            var bound:Index? = nil 
+            // ascend
             while let parent:Index = self.forest.parent(of: current)
             {
-                switch try less(self.forest[parent].value) 
+                if try predicate(self.forest[parent].value) 
                 {
-                case false?: 
-                    break ascending 
-                case nil: 
-                    return (parent, nil) 
-                case true?:
+                    // because ascension can skip elements, we don’t 
+                    // know if this is the *first* element where `predicate`
+                    // would have returned true, so we need to check the 
+                    // right subtree of the child.
+                    if let right:Index = self.forest.right(of: current) 
+                    {
+                        current = right 
+                        bound = parent 
+                        break 
+                    }
+                    else 
+                    {
+                        return parent 
+                    }
+                }
+                else 
+                {
                     current = parent 
                 }
             }
-            guard var current:Index = self.forest.right(of: current)
-            else 
+            // descend
+            while true 
             {
-                return (current, .right)
-            }
-            // descend 
-            while true
-            {
-                switch try less(self.forest[current].value)
+                if try predicate(self.forest[current].value) 
                 {
-                case true?:
-                    if let next:Index = self.forest.right(of: current)
+                    bound = current 
+                    guard let left:Index = self.forest.left(of: current) 
+                    else 
                     {
-                        current = next
+                        break 
                     }
-                    else
-                    {
-                        return (current, .right)
-                    }
-                
-                case nil: 
-                    return (current, nil) 
-                
-                case false?:
-                    if let next:Index = self.forest.left(of: current)
-                    {
-                        current = next
-                    }
-                    else
-                    {
-                        return (current, .left)
-                    }
+                    current = left
+                }
+                else if let right:Index = self.forest.right(of: current)
+                {
+                    current = right
+                }
+                else 
+                {
+                    break 
+                }
+            }
+            return bound 
+        }
+    }
+}
+extension Forest 
+{
+    // @inlinable public 
+    // func first(bisecting root:Index, where predicate:(Value) throws -> Bool) rethrows -> Index?
+    // {
+    //     if try predicate(self[root].value)
+    //     {
+    //         if let next:Index = self.left(of: root) 
+    //         {
+    //             return try self.first(bisecting: next, where: predicate) ?? root
+    //         }
+    //         else 
+    //         {
+    //             return root 
+    //         }
+    //     }
+    //     else if let next:Index = self.right(of: root)
+    //     {
+    //         return try self.first(bisecting: next, where: predicate)
+    //     }
+    //     else 
+    //     {
+    //         return nil
+    //     }
+    // }
+}
+extension Forest.Tree 
+{
+    /// Performs binary search on this tree, returning a valid leaf node 
+    /// for insertion if an exact match was not found.
+    /// 
+    /// This method is like ``first(where:)``, but it returns a leaf node 
+    /// instead of a nearby internal node if an exact match is not found.
+    /// 
+    /// For point-like data, performing insertion with this method may be 
+    /// more efficient than calling ``first(where:)`` and walking back down 
+    /// from an internal node.
+    @inlinable public 
+    func walk(by less:(Value) throws -> Bool?) rethrows -> (index:Forest.Index, side:Forest.Node.Side?)?
+    {
+        guard var current:Forest.Index = self.head?.index
+        else 
+        {
+            return nil
+        }
+
+        switch try less(self.forest[current].value)
+        {
+        case false?:
+            // head can never have a left-child. we return `nil` and not `(current, .left)`
+            // to reflect the fact that any such insertion would also change ``head``.
+            return nil 
+        case nil: 
+            return (current, nil) 
+        case true?: 
+            break 
+        }
+        ascending:
+        while let parent:Forest.Index = self.forest.parent(of: current)
+        {
+            switch try less(self.forest[parent].value) 
+            {
+            case false?: 
+                break ascending 
+            case nil: 
+                return (parent, nil) 
+            case true?:
+                current = parent 
+            }
+        }
+        guard var current:Forest.Index = self.forest.right(of: current)
+        else 
+        {
+            return (current, .right)
+        }
+        // descend 
+        while true
+        {
+            switch try less(self.forest[current].value)
+            {
+            case true?:
+                if let next:Forest.Index = self.forest.right(of: current)
+                {
+                    current = next
+                }
+                else
+                {
+                    return (current, .right)
+                }
+            
+            case nil: 
+                return (current, nil) 
+            
+            case false?:
+                if let next:Forest.Index = self.forest.left(of: current)
+                {
+                    current = next
+                }
+                else
+                {
+                    return (current, .left)
                 }
             }
         }
@@ -155,7 +275,7 @@ extension Forest.Tree where Value:Comparable
     @inlinable public 
     func find(_ value:Value) -> Forest<Value>.Index?
     {
-        self.find { $0 < value ? true : $0 == value ? nil : false }
+        self.first(where: { value <= $0 }).flatMap { self.forest[$0].value == value ? $0 : nil }
     }
 }
 extension Forest.Tree:CustomStringConvertible 

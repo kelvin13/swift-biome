@@ -4,3 +4,6 @@
 .vscode
 .biome
 .checkouts
+.zoo
+generate-symbolgraphs
+swift-nio

@@ -1,5 +1,4 @@
 import Markdown
-import Resources 
 import DOM
 import HTML
 
@@ -36,11 +35,15 @@ struct Extension:Sendable
         }
     }
     
-    init(markdown string:String)
+    init(markdown source:String, name:String = "")
     {
-        let root:Markdown.Document = .init(parsing: string, 
-            options: [ .parseBlockDirectives, .parseSymbolLinks ])
-        self.init(root: root)
+        self.init(root: .init(parsing: source, 
+            options: [ .parseBlockDirectives, .parseSymbolLinks ]))
+        // if there is no explicit `@path(_:)` directive, use the filename
+        if case nil = self.metadata.path
+        {
+            self.metadata.path = .implicit(normalizing: name)
+        }
     }
     private  
     init(root:Markdown.Document)
@@ -155,8 +158,8 @@ struct Extension:Sendable
             return nil
         }
     }
-    
-    func render() -> Article.Template<String>
+
+    func rendered() -> (DOM.Flattened<String>, DOM.Flattened<String>)
     {
         var renderer:Renderer = .init(rank: self.headline.rank)
         // note: we *never* render the top-level heading. this will either be 
@@ -194,6 +197,10 @@ struct Extension:Sendable
         {
             summary = .init()
         }
-        return .init(errors: renderer.errors, summary: summary, discussion: discussion)
+        if !renderer.errors.isEmpty
+        {
+            print("warning: ignored \(renderer.errors.count) markdown rendering errors")
+        }
+        return (summary, discussion)
     }
 }

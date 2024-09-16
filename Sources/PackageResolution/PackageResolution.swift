@@ -1,31 +1,16 @@
-import SymbolGraphs
-import Versions 
 import JSON
+import SymbolSource
 
 public 
-struct PackageResolution
+struct PackageResolution:Sendable
 {
     public
-    var pins:[Pin.ID: MaskedVersion]
+    var pins:[Pin.ID: Pin]
 
     public
     init(pins:[Pin])
     {
-        self.pins = [:]
-        for pin:Pin in pins 
-        {
-            // these strings are slightly different from the ones we 
-            // parse from url queries 
-            switch pin.state.requirement 
-            {
-            case .version(let version):
-                self.pins[pin.id] = version
-            case .branch(let branch):
-                self.pins[pin.id] = 
-                    (try? .init(parsing:   branch)) ?? 
-                    (try? .init(toolchain: branch))
-            }
-        }
+        self.pins = .init(pins.lazy.map { ($0.id, $0) }) { $1 }
     }
     public 
     init(from json:JSON) throws 

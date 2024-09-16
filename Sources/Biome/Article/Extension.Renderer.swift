@@ -1,7 +1,7 @@
 import DOM
 import HTML
 import Markdown
-import enum SymbolGraphs.Highlight
+import SymbolSource
 
 extension Extension
 {
@@ -259,7 +259,7 @@ extension Extension
         }
         
         private mutating 
-        func render(heading:Heading) -> HTML.Element<String> 
+        func render(heading:Heading) -> HTML.Element<String>
         {
             switch heading.level + self.rank
             {

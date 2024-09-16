@@ -1,6 +1,7 @@
-import enum SymbolGraphs.Highlight
+import SymbolSource
 import SwiftSyntaxParser
 import SwiftSyntax
+import IDEUtils
 
 extension Extension.Renderer 
 {
@@ -78,6 +79,7 @@ extension Extension.Renderer
         case .none:                             color = .text
             
         case .identifier:                       color = .identifier
+        case .operatorIdentifier:               color = .identifier
         case .typeIdentifier:                   color = .type
         case .dollarIdentifier:                 color = .pseudo
         case .integerLiteral:                   color = .number 
